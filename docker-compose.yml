@@ -1,0 +1,92 @@
+version: '3.8'
+
+services:
+  api:
+    build:
+      context: .
+      dockerfile: src/Com.Store.Orders.Api/Dockerfile
+    ports:
+      - "5000:8080"
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - ConnectionStrings__OrdersDbConnectionString=Host=db;Database=orders;Username=postgres;Password=postgres
+      - ConnectionStrings__RedisConnectionString=redis:6379
+      - AWS_ACCESS_KEY_ID=test
+      - AWS_SECRET_ACCESS_KEY=test
+      - AWS_REGION=us-east-1
+      - AwsMessaging__Source=Orders.Api
+      - AwsMessaging__Queues__OrderStatusUpdated=http://localstack:4566/000000000000/order-status-updated
+      - JwtSettings__SecretKey=lxJmNrExPQ1rDZFJ39xDfJbmIOoDvJqz
+      - JwtSettings__Issuer=orders
+      - JwtSettings__Audience=orders.clients
+      - JwtSettings__ExpirationInMinutes=60
+    depends_on:
+      - db
+      - localstack
+      - redis
+    networks:
+      - orders-network
+
+  lambda:
+    build:
+      context: .
+      dockerfile: src/Com.Store.Orders.OrderStatusUpdatedHandler/Dockerfile
+    ports:
+      - "9000:9000"
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - ConnectionStrings__OrdersDbConnectionString=Host=db;Database=orders;Username=postgres;Password=postgres
+      - AWS_ACCESS_KEY_ID=test
+      - AWS_SECRET_ACCESS_KEY=test
+      - AWS_REGION=us-east-1
+    depends_on:
+      - db
+      - localstack
+    networks:
+      - orders-network
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - orders-network
+
+  localstack:
+    image: localstack/localstack:latest
+    ports:
+      - "4566:4566"
+    environment:
+      - SERVICES=sqs
+      - DEFAULT_REGION=us-east-1
+      - AWS_ACCESS_KEY_ID=test
+      - AWS_SECRET_ACCESS_KEY=test
+      - DOCKER_HOST=unix:///var/run/docker.sock
+    volumes:
+      - localstack_data:/var/lib/localstack/data
+    networks:
+      - orders-network
+
+  db:
+    image: postgres:16-alpine
+    environment:
+      - POSTGRES_DB=orders
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - orders-network
+
+networks:
+  orders-network:
+    driver: bridge
+
+volumes:
+  postgres_data:
+  localstack_data:
+  redis_data: 
